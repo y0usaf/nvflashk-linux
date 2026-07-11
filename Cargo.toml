@@ -1,0 +1,16 @@
+[package]
+name = "nvflashk-linux"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Guarded patcher for user-supplied NVIDIA NVFlash Linux binaries"
+
+[dependencies]
+sha2 = "0.10"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+pedantic = "deny"

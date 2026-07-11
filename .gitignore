@@ -1,0 +1,4 @@
+/result
+/target
+/research/samples/*
+!/research/samples/.gitkeep
