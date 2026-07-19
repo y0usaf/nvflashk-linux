@@ -1,8 +1,8 @@
 # nvflashk-linux
 
-Auditable Linux reproduction of nvflashk's NVFlash mismatch override. It patches a user-supplied NVIDIA binary and never redistributes proprietary NVFlash files.
+Auditable Linux reproduction of NVFlash mismatch overrides. It patches a user-supplied NVIDIA binary and never redistributes proprietary NVFlash files.
 
-**Status: reverse-engineered and reproducibly built, but not hardware-validated. Do not flash without a factory-ROM backup and an independent recovery path (dual BIOS, iGPU, or second GPU).**
+**Status: k2 is statically validated for both the PCI subsystem and Board ID gates, but not hardware-validated. Do not flash without completing the fail-closed no-write procedure, preserving a factory-ROM backup, and providing an independent recovery path.**
 
 ## Supported input
 
@@ -20,11 +20,14 @@ Unknown binaries are rejected. The original is never modified.
 nix build
 nix flake check
 
-nix run . -- /path/to/x64/nvflash ./nvflashk
-sha256sum ./nvflashk
-# expected: 06508cc681069d295f9006bdd1179f207fcf94f890a7927eb437af918850e221
+nix run . -- /path/to/x64/nvflash ./nvflashk-k2
+sha256sum ./nvflashk-k2
+# expected: 9426d3d05fa2ad0b3a0aa91de56690518f7f83cd26283527baae2e995b08f1d7
+
+nix develop --command python research/verify.py \
+  /path/to/x64/nvflash ./nvflashk-k2
 ```
 
-The generated ELF changes one six-byte conditional jump, forcing NVIDIA's existing internal `override detected` path. It does not invoke NVFlash or access the GPU.
+The generated ELF changes two six-byte instruction spans: the original generic/PCI override branch and the separate Linux Board ID gate. Both edits enter NVIDIA's existing internal handlers. The patcher does not invoke NVFlash or access the GPU.
 
-Reverse-engineering evidence and the exact control-flow mapping: [research/NOTES.md](research/NOTES.md). Architecture and remaining hardware-validation milestone: [DESIGN.md](DESIGN.md).
+Reverse-engineering evidence, exact control-flow mapping, and an independent Capstone verifier: [research/NOTES.md](research/NOTES.md). Safety workstreams: [PLAN.md](PLAN.md). Architecture: [DESIGN.md](DESIGN.md).

@@ -34,12 +34,13 @@
 
 ```text
 src/main.rs                 one-shot patch executor
-research/                   provenance, disassembly notes, and local tooling
+research/NOTES.md           provenance and disassembly evidence
+research/verify.py          independent Capstone/ELF verifier
 research/samples/           ignored proprietary inputs
 flake.nix                   authoritative package/dev/check definitions
 ```
 
-The executor reads an original binary, proves its identity and expected instruction bytes, writes a patched copy, then verifies the output. It never invokes NVFlash or accesses hardware.
+The executor reads an original binary, proves its identity and both expected instruction spans, writes a patched copy, then verifies the complete output hash. It never invokes NVFlash or accesses hardware.
 
 ## Deferred (and why)
 
@@ -50,8 +51,10 @@ The executor reads an original binary, proves its identity and expected instruct
 
 ## Roadmap
 
-- [x] WS0 — Pin the research environment and acquire hash-identified reference binaries. *Accept: Nix shell exposes ELF/PE analysis tools and sample hashes are recorded.*
-- [x] WS1 — Recover nvflashk's Windows control-flow modifications and map them to Linux. *Accept: notes identify source and target basic blocks with disassembly evidence.*
-- [x] WS2 — Implement the guarded Linux patch. *Accept: synthetic tests cover success, unknown hash, wrong bytes, and existing output.*
-- [x] WS3 — Independently validate without writes. *Accept: patched binary starts, reports its version, and retains all non-target bytes.*
-- [ ] WS4 — Hardware validation by an equipped tester. *Accept: backup, mismatch prompt, flash, reboot, and restoration are documented on a dual-BIOS/test GPU.*
+- [x] Pin the research environment and hash-identified reference binaries.
+- [x] Recover nvflashk's Windows control-flow modification and map the PCI subsystem path to Linux.
+- [x] Locate the separate Linux Board ID gate from `.eh_frame`, string xrefs, and Windows/Linux control-flow comparison.
+- [x] Implement guarded k2 with preflight checks for both edits and a pinned complete output hash.
+- [x] Validate k2 with GNU objdump plus independent Capstone/pyelftools analysis.
+- [ ] Run the fail-closed no-write hardware harness and prove the installed VBIOS unchanged (`PLAN.md` WS4–WS5).
+- [ ] Complete image validation and explicit pre-flash gates before any separately approved manual write (`PLAN.md` WS6–WS9).
