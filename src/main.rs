@@ -7,10 +7,27 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 const INPUT_SHA256: &str = "bc36918546a749650a1a28cfd990a506a531b77529b57a7f119ad214563bc7e7";
-const OUTPUT_SHA256: &str = "06508cc681069d295f9006bdd1179f207fcf94f890a7927eb437af918850e221";
-const PATCH_OFFSET: usize = 0x1a_5af3;
-const ORIGINAL: [u8; 6] = [0x0f, 0x84, 0x12, 0x01, 0x00, 0x00];
-const PATCHED: [u8; 6] = [0x90; 6];
+const OUTPUT_SHA256: &str = "9426d3d05fa2ad0b3a0aa91de56690518f7f83cd26283527baae2e995b08f1d7";
+
+#[derive(Clone, Copy)]
+struct Patch {
+    offset: usize,
+    original: &'static [u8],
+    patched: &'static [u8],
+}
+
+const PATCHES: [Patch; 2] = [
+    Patch {
+        offset: 0x1a_5af3,
+        original: &[0x0f, 0x84, 0x12, 0x01, 0x00, 0x00],
+        patched: &[0x90; 6],
+    },
+    Patch {
+        offset: 0x1a_aff7,
+        original: &[0x0f, 0x84, 0xb9, 0x00, 0x00, 0x00],
+        patched: &[0xe9, 0x7f, 0x00, 0x00, 0x00, 0x90],
+    },
+];
 
 fn usage() {
     println!(
@@ -28,18 +45,29 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-fn apply_patch(bytes: &mut [u8]) -> Result<(), String> {
-    let target = bytes
-        .get_mut(PATCH_OFFSET..PATCH_OFFSET + ORIGINAL.len())
-        .ok_or_else(|| "input is too short for the verified patch offset".to_owned())?;
-    if target != ORIGINAL {
-        return Err(format!(
-            "patch precondition failed at 0x{PATCH_OFFSET:x}: expected {}, found {}",
-            hex(&ORIGINAL),
-            hex(target)
-        ));
+fn apply_patches(bytes: &mut [u8]) -> Result<(), String> {
+    for patch in PATCHES {
+        let target = bytes
+            .get(patch.offset..patch.offset + patch.original.len())
+            .ok_or_else(|| {
+                format!(
+                    "input is too short for verified patch offset 0x{:x}",
+                    patch.offset
+                )
+            })?;
+        if target != patch.original {
+            return Err(format!(
+                "patch precondition failed at 0x{:x}: expected {}, found {}",
+                patch.offset,
+                hex(patch.original),
+                hex(target)
+            ));
+        }
     }
-    target.copy_from_slice(&PATCHED);
+
+    for patch in PATCHES {
+        bytes[patch.offset..patch.offset + patch.patched.len()].copy_from_slice(patch.patched);
+    }
     Ok(())
 }
 
@@ -123,7 +151,7 @@ fn run(input: &Path, output: &Path) -> Result<(), String> {
         ));
     }
 
-    apply_patch(&mut bytes)?;
+    apply_patches(&mut bytes)?;
     let actual_output = sha256(&bytes);
     if actual_output != OUTPUT_SHA256 {
         return Err(format!(
@@ -165,18 +193,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn patch_replaces_only_verified_branch() {
-        let mut bytes = vec![0_u8; PATCH_OFFSET + ORIGINAL.len()];
-        bytes[PATCH_OFFSET..].copy_from_slice(&ORIGINAL);
-        apply_patch(&mut bytes).unwrap();
-        assert_eq!(&bytes[PATCH_OFFSET..], PATCHED);
-        assert!(bytes[..PATCH_OFFSET].iter().all(|byte| *byte == 0));
+    fn patch_applies_both_edits_and_changes_exactly_ten_bytes() {
+        let len = PATCHES
+            .iter()
+            .map(|patch| patch.offset + patch.original.len())
+            .max()
+            .unwrap();
+        let mut bytes = vec![0_u8; len];
+        for patch in PATCHES {
+            bytes[patch.offset..patch.offset + patch.original.len()]
+                .copy_from_slice(patch.original);
+        }
+        let original = bytes.clone();
+
+        apply_patches(&mut bytes).unwrap();
+
+        for patch in PATCHES {
+            assert_eq!(
+                &bytes[patch.offset..patch.offset + patch.patched.len()],
+                patch.patched
+            );
+        }
+        assert_eq!(
+            original
+                .iter()
+                .zip(&bytes)
+                .filter(|(before, after)| before != after)
+                .count(),
+            10
+        );
     }
 
     #[test]
-    fn patch_rejects_unexpected_instruction() {
-        let mut bytes = vec![0_u8; PATCH_OFFSET + ORIGINAL.len()];
-        assert!(apply_patch(&mut bytes).is_err());
+    fn patch_rejects_either_unexpected_instruction_without_mutation() {
+        for broken in 0..PATCHES.len() {
+            let len = PATCHES
+                .iter()
+                .map(|patch| patch.offset + patch.original.len())
+                .max()
+                .unwrap();
+            let mut bytes = vec![0_u8; len];
+            for patch in PATCHES {
+                bytes[patch.offset..patch.offset + patch.original.len()]
+                    .copy_from_slice(patch.original);
+            }
+            bytes[PATCHES[broken].offset] ^= 0xff;
+            let original = bytes.clone();
+
+            assert!(apply_patches(&mut bytes).is_err());
+            assert_eq!(bytes, original);
+        }
     }
 
     #[test]
