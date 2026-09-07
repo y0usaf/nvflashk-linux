@@ -1,4 +1,14 @@
 /result
+/result-*
 /target
+/dist
+__pycache__/
+*.py[cod]
+*.rom
+*.ROM
+*.exe
+*.zip
+/nvflash
+/nvflashk-k*
 /research/samples/*
 !/research/samples/.gitkeep

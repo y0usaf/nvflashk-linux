@@ -1,0 +1,48 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to check out and validate
+        required: true
+        type: string
+      dry_run:
+        description: Validate/archive without publishing
+        required: false
+        default: true
+        type: boolean
+permissions: {}
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  source-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - uses: cachix/install-nix-action@08dcb3a5e62fa31e2da3d490afc4176ef55ecd72 # v30
+      - name: Validate release tag and checkout
+        run: |
+          ./scripts/validate-release "$TAG"
+          test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$(git rev-parse HEAD)"
+      - run: nix build
+      - run: nix flake check
+      - name: Create source archive and checksum
+        run: python3 scripts/archive-release.py "$TAG" "nvflashk-linux-${TAG#v}.tar.gz"
+      - name: Publish GitHub release
+        if: github.event_name == 'push' || inputs.dry_run == false
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$TAG" in *-rc.*) prerelease=true; latest=false ;; *) prerelease=false; latest=true ;; esac
+          gh release create "$TAG" "nvflashk-linux-${TAG#v}.tar.gz" "nvflashk-linux-${TAG#v}.tar.gz.sha256" \
+            --verify-tag --draft=false --prerelease="$prerelease" --latest="$latest" --notes-file CHANGELOG.md
