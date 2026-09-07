@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+TAG=${1:?usage: validate-release vX.Y.Z[ -rc.N]}
+exec python3 - "$TAG" <<'PY'
+import re, sys, tomllib
+from pathlib import Path
+
+tag = sys.argv[1]
+match = re.fullmatch(r"v([0-9]+)\.([0-9]+)\.([0-9]+)(-rc\.([0-9]+))?", tag)
+if not match or any(part != str(int(part)) for part in match.group(1, 2, 3)) or (match.group(5) is not None and (match.group(5) == "0" or match.group(5) != str(int(match.group(5))))):
+    raise SystemExit(f"invalid release tag: {tag}")
+root = Path.cwd()
+manifest = tomllib.loads((root / "Cargo.toml").read_text())
+lock = tomllib.loads((root / "Cargo.lock").read_text())
+version = manifest["package"]["version"]
+lock_versions = [p["version"] for p in lock.get("package", []) if p.get("name") == manifest["package"]["name"]]
+expected = match.group(1) + "." + match.group(2) + "." + match.group(3) + (match.group(4) or "")
+if version != expected:
+    raise SystemExit(f"Cargo.toml version {version} does not match tag {tag}")
+if lock_versions != [version]:
+    raise SystemExit(f"Cargo.lock version for {manifest['package']['name']} does not match Cargo.toml")
+print(f"release valid: {tag} (source-only)")
+PY

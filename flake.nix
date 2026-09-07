@@ -16,18 +16,24 @@
       projectSource = pkgs.lib.cleanSourceWith {
         src = ./.;
         filter =
-          path: _type:
+          path: type:
           let
             relative = pkgs.lib.removePrefix "${toString ./.}/" (toString path);
+            base = builtins.baseNameOf path;
           in
-          !(pkgs.lib.hasPrefix "research/samples/" relative)
+          pkgs.lib.cleanSourceFilter path type
+          && !(pkgs.lib.hasPrefix "research/samples/" relative)
           && relative != "result"
+          && !(pkgs.lib.hasPrefix "result-" relative)
+          && relative != "dist"
+          && base != "__pycache__"
+          && base != ".pytest_cache"
           && relative != "target"
           && !(pkgs.lib.hasPrefix "target/" relative);
       };
       package = pkgs.rustPlatform.buildRustPackage {
         pname = "nvflashk-linux";
-        version = "0.1.0";
+        version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
         src = projectSource;
         cargoLock.lockFile = ./Cargo.lock;
         doCheck = true;
@@ -44,7 +50,28 @@
         default = package;
         nvflashk-linux = package;
       };
-      checks.${system}.default = package;
+      checks.${system} = {
+        default = package;
+        release-tests =
+          pkgs.runCommand "release-tests"
+            {
+              nativeBuildInputs = [
+                pkgs.python3Packages.pytest
+                pkgs.git
+              ];
+            }
+            ''
+              cp -r ${projectSource}/. source
+              chmod -R u+w source
+              mkdir -p source/scripts
+              cp ${./scripts/validate-release} source/scripts/validate-release
+              cd source
+              export HOME="$TMPDIR/home"
+              mkdir -p "$HOME"
+              VALIDATOR=${./scripts/validate-release} pytest -q tests/test_*.py research/test_no_write.py
+              touch $out
+            '';
+      };
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
           binutils
