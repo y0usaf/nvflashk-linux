@@ -17,8 +17,6 @@ struct Patch {
 }
 
 const PATCHES: [Patch; 2] = [
-    // The early Board ID gate must accept the explicitly supplied overridesub
-    // option too. Its Board ID label and separate YES confirmation stay intact.
     Patch {
         offset: 0x1a_abc6,
         original: &[0xbe, 0x7d, 0xd5, 0x99, 0x00],
@@ -137,7 +135,6 @@ fn write_new_atomic(output: &Path, bytes: &[u8], mode: u32) -> Result<(), String
         file.sync_all()
             .map_err(|error| format!("cannot sync temporary output: {error}"))?;
 
-        // A hard link publishes the completed inode atomically and fails if output exists.
         fs::hard_link(&temp, output)
             .map_err(|error| format!("cannot publish {}: {error}", output.display()))?;
         Ok(())

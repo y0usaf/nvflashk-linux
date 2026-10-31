@@ -91,10 +91,9 @@ def run(command, log, before=None, after=None, timeout=30, board=None):
              if part is not None]
     master, slave = pty.openpty()
     attrs = termios.tcgetattr(slave)
-    attrs[1] &= ~termios.OPOST  # Preserve exact output bytes, including CR/LF.
+    attrs[1] &= ~termios.OPOST
     attrs[3] &= ~termios.ECHO
     termios.tcsetattr(slave, termios.TCSANOW, attrs)
-    # NVFlash reads its final single-key answer from the controlling terminal.
     def controlling_terminal():
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
@@ -116,7 +115,7 @@ def run(command, log, before=None, after=None, timeout=30, board=None):
             try:
                 chunk = os.read(master, 4096)
             except OSError as error:
-                if error.errno != 5:  # PTY EOF on Linux
+                if error.errno != 5:
                     raise
                 chunk = b""
             if not chunk:
@@ -131,9 +130,6 @@ def run(command, log, before=None, after=None, timeout=30, board=None):
                 require(expected.startswith(pending), "Transcript drift; no further input sent")
                 if pending == expected:
                     if answer == b"n\n":
-                        # NVFlash prints the prompt before switching /dev/tty
-                        # to single-key mode, flushing queued input. Wait for
-                        # that transition; any new output still fails closed.
                         ready, _, _ = select.select([master], [], [], 0.25)
                         require(not ready, "Transcript drift before final abort")
                     os.write(master, answer)
